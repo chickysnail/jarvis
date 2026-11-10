@@ -271,11 +271,15 @@ def summarize(sessions: list[Session], min_seconds: int = 60) -> str:
         return "No app sessions."
     lines = [fmt_session(s) for s in sessions if s.seconds >= min_seconds or s.ongoing]
     short: dict[str, int] = {}
+    last: dict[str, int] = {}
     for s in sessions:
         if s.seconds < min_seconds and not s.ongoing:
             short[s.name] = short.get(s.name, 0) + 1
+            last[s.name] = s.start
     if short:
-        parts = ", ".join(f"{n}×{c}" if c > 1 else n for n, c in sorted(short.items(), key=lambda x: -x[1]))
+        def item(n, c):
+            return (f"{n}×{c} (last {_hm(last[n])})" if c > 1 else f"{n} ({_hm(last[n])})")
+        parts = ", ".join(item(n, c) for n, c in sorted(short.items(), key=lambda x: -x[1]))
         lines.append(f"Quick checks (<{fmt_dur(min_seconds)}): {parts}")
     totals: dict[str, int] = {}
     for s in sessions:

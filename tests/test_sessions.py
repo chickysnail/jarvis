@@ -139,7 +139,7 @@ def test_formatting():
     assert fmt_session(ss[0]) == "Instagram 21:02–21:19 (17m)"
     assert summarize(ss) == (
         "Instagram 21:02–21:19 (17m)\n"
-        "Quick checks (<1m): Telegram\n"
+        "Quick checks (<1m): Telegram (21:32)\n"
         "Totals: Instagram 17m, Telegram 20s"
     )
 

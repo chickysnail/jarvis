@@ -93,17 +93,24 @@ def test_message_wake_sends_reply_and_logs(env):
     assert [ctx.index(h) for h in order] == sorted(ctx.index(h) for h in order)
     assert "хай" in ctx and "They sent you a message" in ctx
 
-    # Second call carries the assistant turn unchanged + the tool result.
-    second = client.calls[1]["messages"]
-    assert second[1] == {"role": "assistant", "content": first.content}
-    assert second[1]["content"] is first.content
-    assert second[2]["content"][0]["type"] == "tool_result" and second[2]["content"][0]["content"] == "sent"
+    # Sent a message and nothing else pending: the wake ends without a second call.
+    assert len(client.calls) == 1
 
     run_row = env.conn.execute("SELECT * FROM agent_runs WHERE id=?", (run_id,)).fetchone()
     assert [x["tool"] for x in json.loads(run_row["actions"])] == ["send_message"]
-    assert run_row["final_text"] == "done" and run_row["error"] is None
+    assert run_row["error"] is None
     calls = env.conn.execute("SELECT * FROM api_calls").fetchall()
-    assert len(calls) == 2 and all(c["cost_usd"] == pytest.approx((1000 * 2 + 100 * 10) / 1e6) for c in calls)
+    assert len(calls) == 1 and all(c["cost_usd"] == pytest.approx((1000 * 2 + 100 * 10) / 1e6) for c in calls)
+
+
+def test_look_up_result_goes_back_unchanged_turn(env):
+    first = resp(tool_use("look_up", {"start": "2026-11-10 00:00", "end": "2026-11-10 06:00"}))
+    a, client = make(env, [first, resp(tool_use("send_message", {"text": "ok"}, "t2"))])
+    run(a.wake(["They sent you a message: 'когда я был в инсте?'"]))
+    assert len(client.calls) == 2
+    second = client.calls[1]["messages"]
+    assert second[1]["content"] is first.content  # assistant turn passed back as-is (thinking blocks)
+    assert second[2]["content"][0]["type"] == "tool_result" and "## Phone" in second[2]["content"][0]["content"]
 
 
 def test_stay_quiet_ends_wake_in_one_call(env):

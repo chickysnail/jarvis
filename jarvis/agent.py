@@ -25,6 +25,7 @@ MAX_STEPS = 8             # model calls per wake (safety net against loops, not 
 DEBOUNCE_S = 3            # gather quick consecutive messages into one wake
 TICK_S = 30
 BETAS = ["server-side-fallback-2026-07-01"]
+INFO_TOOLS = {"look_up"}  # tools whose output the model needs to read before finishing
 
 Send = Callable[[str, list[str] | None], Awaitable[int]]
 
@@ -251,7 +252,10 @@ class Agent:
                     results.append({"type": "tool_result", "tool_use_id": u.id, "content": out,
                                     **({"is_error": True} if is_err else {})})
                 messages.append({"role": "user", "content": results})
-                if ctx.done:
+                # End once it has spoken or chosen silence, unless it still needs a result back
+                # (a look_up to read, or an error to fix). Saves a model call per wake.
+                needs_more = any(u.name in INFO_TOOLS for u in uses) or any("is_error" in r for r in results)
+                if ctx.done or (ctx.sent and not needs_more):
                     break
             else:
                 error = f"stopped after {MAX_STEPS} steps"

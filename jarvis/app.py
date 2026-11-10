@@ -1,3 +1,4 @@
+import asyncio
 import hmac
 import json
 import logging
@@ -45,21 +46,39 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("JARVIS_SHARED_SECRET is not set (see .env.example)")
     app.state.db = db.connect()
     app.state.bot = None
-    if config.telegram_token():
+    starter = asyncio.create_task(_start_bot(app)) if config.telegram_token() else None
+    yield
+    if starter:
+        starter.cancel()
+    if app.state.bot:
+        await app.state.bot.stop()
+    app.state.db.close()
+
+
+async def _start_bot(app: FastAPI):
+    """Start Telegram in the background, retrying with backoff, so phone events keep flowing
+    regardless. A rejected token is not retried."""
+    from telegram.error import InvalidToken
+
+    delay = 5
+    while True:
         bot = TelegramBot(app.state.db, config.telegram_token())
         try:
             await bot.start()
             app.state.bot = bot
+            return
+        except InvalidToken:
+            log.error("telegram token rejected; fix TELEGRAM_BOT_TOKEN and restart")
+            return
         except Exception as e:
-            # Phone events must keep flowing even if Telegram is misconfigured.
-            # Never log the raw exception: Telegram errors can contain the token.
-            msg = str(e).replace(config.telegram_token(), "<TOKEN>")
-            log.error("telegram bot failed to start (%s: %s); continuing without it",
-                      type(e).__name__, msg)
-    yield
-    if app.state.bot:
-        await app.state.bot.stop()
-    app.state.db.close()
+            log.warning("telegram bot failed to start (%s: %s); retrying in %ss",
+                        type(e).__name__, e, delay)
+            try:
+                await bot.app.shutdown()
+            except Exception:
+                pass
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 300)
 
 
 # No /docs or /openapi.json: /event is reachable from the internet via the tunnel.

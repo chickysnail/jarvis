@@ -9,7 +9,7 @@ and decides for itself when to speak, stay quiet, or look again.
 - [x] Step 2 — app sessions + compact summaries (`jarvis/sessions.py`, `GET /sessions?day=`, `python -m jarvis.sessions [YYYY-MM-DD]`)
 - [x] Step 3 — Cloudflare tunnel (`jarvis.chickysnail.blog`, `deploy/`) + Tasker HTTP POST (`tasker/`)
 - [x] Step 4 — Telegram bot, two-way, full history (`jarvis/telegram_bot.py`, `jarvis/chat.py`)
-- [ ] Step 5 — agent loop (Claude, tools, notebook, watches, wake-ups)
+- [x] Step 5 — agent loop (`jarvis/agent.py`, `jarvis/tools.py`, `jarvis/triggers.py`, `prompts/`)
 - [ ] Step 6 — usage/cost tracking
 
 ## Setup

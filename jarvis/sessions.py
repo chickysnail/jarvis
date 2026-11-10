@@ -187,6 +187,65 @@ def sessions_for_day(conn, d: date | None = None, now: int | None = None) -> lis
     return sessions_between(conn, *day_bounds(d), now=now)
 
 
+@dataclass
+class PhoneState:
+    last_event_ts: int | None
+    screen_on: bool
+    current: Session | None  # ongoing session, if any
+    batt: int | None
+
+
+def current_state(conn: sqlite3.Connection, now: int | None = None) -> PhoneState:
+    now = int(time.time()) if now is None else now
+    last = conn.execute("SELECT ts, event, batt FROM events ORDER BY ts DESC, id DESC LIMIT 1").fetchone()
+    if last is None:
+        return PhoneState(None, False, None, None)
+    rows = conn.execute("SELECT ts, event, app FROM events WHERE ts >= ? ORDER BY ts, id",
+                        (now - LOOKBACK,)).fetchall()
+    ss = derive_sessions(rows, now=now)
+    cur = ss[-1] if ss and ss[-1].ongoing else None
+    batt = conn.execute("SELECT batt FROM events WHERE batt IS NOT NULL ORDER BY ts DESC, id DESC LIMIT 1").fetchone()
+    return PhoneState(last["ts"], _norm_event(last["event"]) != "screen_off", cur, batt[0] if batt else None)
+
+
+def fmt_state(st: PhoneState, now: int | None = None) -> str:
+    now = int(time.time()) if now is None else now
+    if st.last_event_ts is None:
+        return "No phone data yet."
+    ago = fmt_dur(now - st.last_event_ts)
+    parts = [f"Screen {'on' if st.screen_on else 'off'}"]
+    if st.current:
+        parts.append(f"in {st.current.name} for {fmt_dur(st.current.seconds)} (since {_hm(st.current.start)})")
+    elif st.screen_on:
+        parts.append("no app in front (launcher or system screen)")
+    if st.batt is not None:
+        parts.append(f"battery {st.batt}%")
+    parts.append(f"last phone event {ago} ago")
+    line = ", ".join(parts) + "."
+    if now - st.last_event_ts > 3 * 3600 and st.screen_on:
+        line += " (No events for a while: the phone may be offline, so this may be stale.)"
+    return line
+
+
+def known_apps(conn: sqlite3.Connection, days: int = 30) -> dict[str, str]:
+    """name -> package for real apps seen recently (plus the built-in name table)."""
+    since = int(time.time()) - days * 86400
+    pkgs = [r[0] for r in conn.execute(
+        "SELECT DISTINCT app FROM events WHERE event = 'app_changed' AND ts >= ?", (since,))]
+    out = {app_name(p): p for p in pkgs if not is_noise(p)}
+    for p, n in APP_NAMES.items():
+        out.setdefault(n, p)
+    return out
+
+
+def resolve_app(conn: sqlite3.Connection, name_or_pkg: str) -> str | None:
+    s = name_or_pkg.strip()
+    if "." in s and " " not in s:
+        return s  # looks like a package already
+    apps = {n.lower(): p for n, p in known_apps(conn).items()}
+    return apps.get(s.lower())
+
+
 # ---------- formatting ----------
 
 def fmt_dur(seconds: int) -> str:

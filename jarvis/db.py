@@ -41,6 +41,58 @@ CREATE TABLE IF NOT EXISTS messages (
     tg_message_id INTEGER
 );
 CREATE INDEX IF NOT EXISTS messages_ts ON messages (ts);
+
+-- Wake-ups Jarvis scheduled for itself.
+CREATE TABLE IF NOT EXISTS wakeups (
+    id         INTEGER PRIMARY KEY,
+    created_ts INTEGER NOT NULL,
+    due_ts     INTEGER NOT NULL,
+    note       TEXT    NOT NULL,
+    status     TEXT    NOT NULL DEFAULT 'pending'   -- pending | fired | cancelled
+);
+
+-- Watches Jarvis set for itself on phone activity.
+CREATE TABLE IF NOT EXISTS watches (
+    id           INTEGER PRIMARY KEY,
+    created_ts   INTEGER NOT NULL,
+    expires_ts   INTEGER NOT NULL,
+    kind         TEXT    NOT NULL,     -- app_opens | app_closes | screen_off | screen_unlocked | session_longer_than
+    apps         TEXT    NOT NULL DEFAULT '[]',  -- JSON list of packages
+    minutes      INTEGER,              -- for session_longer_than
+    note         TEXT    NOT NULL,
+    once         INTEGER NOT NULL DEFAULT 1,
+    status       TEXT    NOT NULL DEFAULT 'active',  -- active | fired | cancelled | expired
+    last_fired_ts INTEGER,
+    last_fired_key TEXT                -- dedupe key, e.g. session start for session_longer_than
+);
+
+-- One row per wake of the agent.
+CREATE TABLE IF NOT EXISTS agent_runs (
+    id        INTEGER PRIMARY KEY,
+    started   INTEGER NOT NULL,
+    ended     INTEGER,
+    reasons   TEXT    NOT NULL,        -- JSON list of reason strings
+    actions   TEXT    NOT NULL DEFAULT '[]',  -- JSON list of {tool, input, result}
+    final_text TEXT,
+    error     TEXT
+);
+
+-- Every Anthropic API call, for cost tracking.
+CREATE TABLE IF NOT EXISTS api_calls (
+    id            INTEGER PRIMARY KEY,
+    ts            INTEGER NOT NULL,
+    run_id        INTEGER REFERENCES agent_runs(id),
+    purpose       TEXT    NOT NULL,    -- 'wake' | 'summary'
+    model         TEXT    NOT NULL,
+    input_tokens  INTEGER NOT NULL,
+    output_tokens INTEGER NOT NULL,
+    cache_read    INTEGER NOT NULL,
+    cache_write   INTEGER NOT NULL,
+    cost_usd      REAL    NOT NULL,
+    request_id    TEXT,
+    stop_reason   TEXT
+);
+CREATE INDEX IF NOT EXISTS api_calls_ts ON api_calls (ts);
 """
 
 

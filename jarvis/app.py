@@ -10,7 +10,9 @@ from datetime import date
 from fastapi import FastAPI, Header, HTTPException, Request
 
 from . import config, db, sessions
+from .agent import Agent
 from .telegram_bot import TelegramBot
+from .tools import ToolError
 
 log = logging.getLogger("jarvis")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -46,13 +48,45 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("JARVIS_SHARED_SECRET is not set (see .env.example)")
     app.state.db = db.connect()
     app.state.bot = None
+    app.state.agent = None
+    if config.anthropic_key():
+        import anthropic
+
+        app.state.agent = Agent(app.state.db, anthropic.AsyncAnthropic(), send=_send_via_bot(app),
+                                typing=_typing_via_bot(app))
+        app.state.agent.start()
+    else:
+        log.warning("ANTHROPIC_API_KEY not set; agent disabled")
     starter = asyncio.create_task(_start_bot(app)) if config.telegram_token() else None
     yield
     if starter:
         starter.cancel()
+    if app.state.agent:
+        await app.state.agent.stop()
     if app.state.bot:
         await app.state.bot.stop()
     app.state.db.close()
+
+
+def _send_via_bot(app: FastAPI):
+    async def send(text: str, buttons: list[str] | None) -> int:
+        if app.state.bot is None:
+            raise ToolError("Telegram isn't connected right now; the message was not sent")
+        return await app.state.bot.send(text, buttons)
+    return send
+
+
+def _typing_via_bot(app: FastAPI):
+    async def typing():
+        bot = app.state.bot
+        if bot and bot.owner():
+            await bot.app.bot.send_chat_action(bot.owner(), "typing")
+    return typing
+
+
+async def _on_incoming(app: FastAPI, msg_id: int):
+    if app.state.agent:
+        app.state.agent.on_chat_message(msg_id)
 
 
 async def _start_bot(app: FastAPI):
@@ -62,7 +96,8 @@ async def _start_bot(app: FastAPI):
 
     delay = 5
     while True:
-        bot = TelegramBot(app.state.db, config.telegram_token())
+        hook = (lambda mid: _on_incoming(app, mid)) if app.state.agent else None
+        bot = TelegramBot(app.state.db, config.telegram_token(), on_incoming=hook)
         try:
             await bot.start()
             app.state.bot = bot
@@ -110,6 +145,11 @@ async def post_event(request: Request, x_jarvis_secret: str | None = Header(defa
             stored = db.insert_event(conn, payload, source="http")
     except db.BadEvent as e:
         raise HTTPException(status_code=422, detail=str(e))
+    if stored and request.app.state.agent:
+        try:
+            request.app.state.agent.on_phone_event(db.normalize(payload))
+        except Exception:
+            log.exception("watch check failed")  # never lose the event over this
     return {"stored": stored, "duplicate": not stored}
 
 

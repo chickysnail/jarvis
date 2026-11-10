@@ -7,7 +7,7 @@ and decides for itself when to speak, stay quiet, or look again.
 
 - [x] Step 1 — FastAPI + SQLite event ingest, JSONL backfill importer
 - [x] Step 2 — app sessions + compact summaries (`jarvis/sessions.py`, `GET /sessions?day=`, `python -m jarvis.sessions [YYYY-MM-DD]`)
-- [ ] Step 3 — Tailscale + Tasker HTTP POST
+- [x] Step 3 — Cloudflare tunnel (`jarvis.chickysnail.blog`, `deploy/`) + Tasker HTTP POST (`tasker/`)
 - [ ] Step 4 — Telegram bot (two-way, history)
 - [ ] Step 5 — agent loop (Claude, tools, notebook, watches, wake-ups)
 - [ ] Step 6 — usage/cost tracking

@@ -1,0 +1,11 @@
+[Unit]
+Description=Cloudflare tunnel for Jarvis
+After=network-online.target jarvis.service
+
+[Service]
+ExecStart=%h/.local/bin/cloudflared tunnel --no-autoupdate run jarvis
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

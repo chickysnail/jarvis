@@ -1,0 +1,9 @@
+# Copied to ~/.cloudflared/config.yml by deploy/setup_tunnel.sh (TUNNEL_ID filled in).
+tunnel: TUNNEL_ID
+credentials-file: HOME_DIR/.cloudflared/TUNNEL_ID.json
+ingress:
+  # Only the phone-facing endpoints are public; everything else stays local.
+  - hostname: jarvis.chickysnail.blog
+    path: ^/(event|health)$
+    service: http://127.0.0.1:8765
+  - service: http_status:404

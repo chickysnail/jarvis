@@ -18,7 +18,8 @@ async def lifespan(app: FastAPI):
     app.state.db.close()
 
 
-app = FastAPI(title="Jarvis", lifespan=lifespan)
+# No /docs or /openapi.json: /event is reachable from the internet via the tunnel.
+app = FastAPI(title="Jarvis", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 
 def _check_secret(given: str | None) -> None:

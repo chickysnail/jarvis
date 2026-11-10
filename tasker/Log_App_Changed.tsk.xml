@@ -1,7 +1,7 @@
 <TaskerData sr="" dvi="1" tv="6.3.13">
 	<Task sr="task901">
 		<cdate>1762732800000</cdate>
-		<edate>1762732800000</edate>
+		<edate>1794272400000</edate>
 		<id>901</id>
 		<nme>Log App Changed</nme>
 		<pri>100</pri>
@@ -21,6 +21,40 @@
 			<Str sr="arg1" ve="3">%json</Str>
 			<Int sr="arg2" val="1"/>
 			<Int sr="arg3" val="1"/>
+		</Action>
+		<Action sr="act2" ve="7">
+			<code>339</code>
+			<se>false</se>
+			<on>true</on>
+			<ConditionList sr="if">
+				<Condition sr="c0" ve="3">
+					<lhs>%SERVER_URL</lhs>
+					<op>12</op>
+					<rhs></rhs>
+				</Condition>
+			</ConditionList>
+			<Bundle sr="arg0">
+				<Vals sr="val">
+					<net.dinglisch.android.tasker.RELEVANT_VARIABLES>&lt;StringArray sr=""&gt;&lt;_array_net.dinglisch.android.tasker.RELEVANT_VARIABLES0&gt;%http_data
+Data
+Data that the server responded from the HTTP request.&lt;/_array_net.dinglisch.android.tasker.RELEVANT_VARIABLES0&gt;&lt;_array_net.dinglisch.android.tasker.RELEVANT_VARIABLES1&gt;%http_response_code
+Response Code
+The HTTP Code the server responded&lt;/_array_net.dinglisch.android.tasker.RELEVANT_VARIABLES1&gt;&lt;/StringArray&gt;</net.dinglisch.android.tasker.RELEVANT_VARIABLES>
+					<net.dinglisch.android.tasker.RELEVANT_VARIABLES-type>[Ljava.lang.String;</net.dinglisch.android.tasker.RELEVANT_VARIABLES-type>
+				</Vals>
+			</Bundle>
+			<Int sr="arg1" val="1"/>
+			<Str sr="arg2" ve="3">%SERVER_URL/event</Str>
+			<Str sr="arg3" ve="3">X-Jarvis-Secret:%JARVIS_SECRET
+Content-Type:application/json</Str>
+			<Str sr="arg4" ve="3"/>
+			<Str sr="arg5" ve="3">%json</Str>
+			<Str sr="arg6" ve="3"/>
+			<Str sr="arg7" ve="3"/>
+			<Int sr="arg8" val="10"/>
+			<Int sr="arg9" val="0"/>
+			<Int sr="arg10" val="0"/>
+			<Int sr="arg11" val="0"/>
 		</Action>
 	</Task>
 </TaskerData>

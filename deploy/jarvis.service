@@ -1,0 +1,12 @@
+[Unit]
+Description=Jarvis server
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/jarvis
+ExecStart=%h/.local/bin/uv run --no-sync python -m jarvis.app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

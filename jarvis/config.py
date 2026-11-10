@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
@@ -18,6 +19,10 @@ def db_path() -> Path:
 
 def host() -> str:
     return os.environ.get("JARVIS_HOST", "127.0.0.1")
+
+
+def tz() -> ZoneInfo:
+    return ZoneInfo(os.environ.get("JARVIS_TZ", "Europe/Berlin"))
 
 
 def port() -> int:

@@ -6,7 +6,7 @@ and decides for itself when to speak, stay quiet, or look again.
 ## Status
 
 - [x] Step 1 — FastAPI + SQLite event ingest, JSONL backfill importer
-- [ ] Step 2 — app sessions + compact summaries
+- [x] Step 2 — app sessions + compact summaries (`jarvis/sessions.py`, `GET /sessions?day=`, `python -m jarvis.sessions [YYYY-MM-DD]`)
 - [ ] Step 3 — Tailscale + Tasker HTTP POST
 - [ ] Step 4 — Telegram bot (two-way, history)
 - [ ] Step 5 — agent loop (Claude, tools, notebook, watches, wake-ups)

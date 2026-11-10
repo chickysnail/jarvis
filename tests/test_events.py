@@ -88,3 +88,16 @@ def test_importer_skips_bad_lines(client, tmp_path):
     p = tmp_path / "log.jsonl"
     p.write_text('{"ts":1,"event":"screen_off","app":"","batt":5}\ngarbage\n\n{"ts":2}\n')
     assert import_file(client.app.state.db, p) == {"stored": 1, "duplicate": 0, "bad": 2}
+
+
+def test_sessions_endpoint(client):
+    from jarvis.importer import import_file
+
+    assert client.get("/sessions?day=2026-11-10").status_code == 401
+    import_file(client.app.state.db, SAMPLE)
+    r = client.get("/sessions?day=2026-11-10", headers=H)
+    assert r.status_code == 200
+    body = r.json()
+    assert any(s["name"] == "Telegram" for s in body["sessions"])
+    assert "Totals:" in body["summary"]
+    assert client.get("/sessions?day=bad", headers=H).status_code == 422

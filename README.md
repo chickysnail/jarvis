@@ -10,7 +10,7 @@ and decides for itself when to speak, stay quiet, or look again.
 - [x] Step 3 — Cloudflare tunnel (`jarvis.chickysnail.blog`, `deploy/`) + Tasker HTTP POST (`tasker/`)
 - [x] Step 4 — Telegram bot, two-way, full history (`jarvis/telegram_bot.py`, `jarvis/chat.py`)
 - [x] Step 5 — agent loop (`jarvis/agent.py`, `jarvis/tools.py`, `jarvis/triggers.py`, `prompts/`)
-- [ ] Step 6 — usage/cost tracking
+- [x] Step 6 — usage/cost tracking (`jarvis/usage.py`, `get_usage` tool, `python -m jarvis.usage [today|week|month|all]`)
 
 ## Setup
 

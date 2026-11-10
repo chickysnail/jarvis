@@ -25,7 +25,7 @@ MAX_STEPS = 8             # model calls per wake (safety net against loops, not 
 DEBOUNCE_S = 3            # gather quick consecutive messages into one wake
 TICK_S = 30
 BETAS = ["server-side-fallback-2026-07-01"]
-INFO_TOOLS = {"look_up"}  # tools whose output the model needs to read before finishing
+INFO_TOOLS = {"look_up", "get_usage"}  # tools whose output the model needs to read before finishing
 
 Send = Callable[[str, list[str] | None], Awaitable[int]]
 

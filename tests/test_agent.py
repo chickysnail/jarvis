@@ -245,3 +245,11 @@ def test_aftermath_reports_reply_and_phone(env):
         db.insert_event(env.conn, {"ts": now - 3000, "event": "screen_off", "app": ""}, "test")
     text_ = a._aftermath(now)
     assert "как дела?" in text_ and "replied after 10m" in text_ and "Instagram 8m" in text_
+
+
+def test_get_usage_tool_result_goes_back(env):
+    a, client = make(env, [resp(tool_use("get_usage", {"period": "today"})),
+                           resp(tool_use("send_message", {"text": "пока 2 цента"}, "t2"))])
+    run(a.wake(["They sent you a message: 'сколько ты стоишь?'"]))
+    assert len(client.calls) == 2
+    assert "Spend (today)" in client.calls[1]["messages"][2]["content"][0]["content"]

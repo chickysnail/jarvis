@@ -41,6 +41,11 @@ def effort() -> str:
     return os.environ.get("JARVIS_EFFORT", "medium")
 
 
+def monthly_budget() -> float:
+    """Optional, informational only: lets Jarvis say how much of the budget is left."""
+    return float(os.environ.get("JARVIS_MONTHLY_BUDGET_USD", "0") or 0)
+
+
 def heartbeat_minutes() -> int:
     return int(os.environ.get("JARVIS_HEARTBEAT_MIN", "120"))
 

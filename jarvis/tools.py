@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from . import chat, config, notebook, sessions, triggers
+from . import chat, config, notebook, sessions, triggers, usage
 
 MAX_BUTTONS = 4
 LOOKUP_MAX_DAYS = 14
@@ -118,6 +118,17 @@ TOOLS = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "get_usage",
+        "description": "Your own API spend: cost, wakes, tokens and cache use for a period, plus the "
+                       "monthly budget if one is set. Use it when they ask what you cost.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"period": {"type": "string", "enum": list(usage.PERIODS)}},
+            "required": ["period"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 
@@ -221,6 +232,11 @@ async def execute(ctx: ToolContext, name: str, inp: dict) -> str:
         except ValueError as e:
             raise ToolError(str(e))
         return f"{inp['file']} updated ({len(notebook.read(inp['file']))} chars)"
+    if name == "get_usage":
+        try:
+            return usage.report(c, inp.get("period", "month"))
+        except ValueError as e:
+            raise ToolError(str(e))
     raise ToolError(f"unknown tool {name!r}")
 
 

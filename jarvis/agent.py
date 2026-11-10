@@ -14,7 +14,7 @@ import time
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 
-from . import chat, config, db, notebook, sessions, tools, triggers, usage
+from . import chat, config, db, killswitch, notebook, sessions, tools, triggers, usage
 
 log = logging.getLogger("jarvis.agent")
 
@@ -63,6 +63,9 @@ class Agent:
 
     # ---------- triggers ----------
     def trigger(self, reason: str):
+        if killswitch.is_paused(self.conn):
+            log.info("paused; dropping wake reason: %s", reason[:200])
+            return
         log.info("wake reason: %s", reason[:200])
         self.pending.append(reason)
         self._wake.set()
@@ -75,6 +78,16 @@ class Agent:
         m = chat.get(self.conn, msg_id)
         if m is None:
             return
+        cmd = m.text.split()[0].split("@")[0].lower() if m.kind == "command" and m.text else ""
+        last = db.kv_get(self.conn, killswitch.LAST_KEY)
+        if cmd in ("/resume", "/start") and last:
+            since, until = (int(x) for x in last.split(","))
+            if time.time() - until < 120:  # just resumed
+                self.trigger(f"They switched you back on with {cmd}. You'd been stopped (via /stop) since "
+                             f"{tools.fmt_ts(since, True)}, {sessions.fmt_dur(until - since)}; nothing you "
+                             "scheduled ran during that time. The bot already said '▶️ Снова работаю.' "
+                             "Only add something if it's worth it.")
+                return
         if m.kind == "button":
             self.trigger(f"They tapped your button: {m.text!r}.")
         else:
@@ -82,8 +95,12 @@ class Agent:
 
     def tick(self, now: int | None = None):
         now = int(time.time()) if now is None else now
+        # Runs while paused too, so due wake-ups get marked and don't pile up for later;
+        # trigger() drops the reasons.
         for r in triggers.due_wakeups(self.conn, now) + triggers.check_long_sessions(self.conn, now):
             self.trigger(r)
+        if killswitch.is_paused(self.conn):
+            return
         last = self.conn.execute("SELECT MAX(started) FROM agent_runs").fetchone()[0] or self.started_at
         a, b = config.quiet_hours()
         hour = datetime.fromtimestamp(now, config.tz()).hour
@@ -105,7 +122,7 @@ class Agent:
             await asyncio.sleep(DEBOUNCE_S)
             self._wake.clear()
             reasons, self.pending = self.pending, []
-            if not reasons:
+            if not reasons or killswitch.is_paused(self.conn):
                 continue
             try:
                 await self.wake(reasons)
@@ -199,6 +216,8 @@ class Agent:
     # ---------- the wake ----------
     async def wake(self, reasons: list[str], now: int | None = None) -> int:
         c = self.conn
+        if killswitch.is_paused(c):
+            return 0
         with c:
             run_id = c.execute("INSERT INTO agent_runs (started, reasons) VALUES (?, ?)",
                                (int(time.time()), json.dumps(reasons, ensure_ascii=False))).lastrowid
@@ -220,6 +239,9 @@ class Agent:
             ctx = tools.ToolContext(c, self.send)
             messages = [{"role": "user", "content": [{"type": "text", "text": context}]}]
             for _step in range(MAX_STEPS):
+                if killswitch.is_paused(c):
+                    error = "stopped via /stop"
+                    break
                 resp = await self.client.beta.messages.create(
                     model=config.model(), max_tokens=16000, system=system, tools=tools.TOOLS,
                     messages=messages, output_config={"effort": config.effort()},
@@ -239,6 +261,9 @@ class Agent:
                     break
                 # Append the assistant turn unchanged (thinking blocks must be passed back as-is).
                 messages.append({"role": "assistant", "content": resp.content})
+                if killswitch.is_paused(c):  # /stop arrived while the model was thinking
+                    error = "stopped via /stop"
+                    break
                 results = []
                 for u in uses:
                     try:

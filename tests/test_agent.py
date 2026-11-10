@@ -253,3 +253,48 @@ def test_get_usage_tool_result_goes_back(env):
     run(a.wake(["They sent you a message: 'сколько ты стоишь?'"]))
     assert len(client.calls) == 2
     assert "Spend (today)" in client.calls[1]["messages"][2]["content"][0]["content"]
+
+
+def test_paused_agent_does_nothing(env):
+    from jarvis import killswitch
+
+    a, client = make(env, [])
+    killswitch.pause(env.conn)
+    a.trigger("Heartbeat")
+    a.on_chat_message(chat.store(env.conn, "in", "text", "эй"))
+    assert a.pending == []
+    assert run(a.wake(["forced"])) == 0 and client.calls == []
+    # Due wake-ups are consumed while paused (so they don't flood in after /resume).
+    wid = triggers.add_wakeup(env.conn, 1, "x", now=1_794_300_000)
+    a.tick(now=1_794_300_000 + 120)
+    assert triggers.pending_wakeups(env.conn) == [] and a.pending == []
+    # No heartbeat while paused either.
+    a.started_at = 0
+    a.tick(now=1_794_300_000 + 999_999)
+    assert a.pending == []
+
+
+def test_stop_mid_wake_blocks_tools(env):
+    from jarvis import killswitch
+
+    class StopsDuringThinking(FakeClient):
+        async def _create(self, **kw):
+            r = await super()._create(**kw)
+            killswitch.pause(env.conn)  # /stop arrives while the model is thinking
+            return r
+
+    client = StopsDuringThinking([resp(tool_use("send_message", {"text": "should not be sent"}))])
+    a = Agent(env.conn, client, env.send)
+    rid = run(a.wake(["Heartbeat"]))
+    assert env.sent == []
+    assert env.conn.execute("SELECT error FROM agent_runs WHERE id=?", (rid,)).fetchone()[0] == "stopped via /stop"
+
+
+def test_resume_reason(env):
+    from jarvis import killswitch
+
+    a, _ = make(env, [])
+    killswitch.pause(env.conn, now=int(__import__("time").time()) - 3600)
+    killswitch.resume(env.conn)
+    a.on_chat_message(chat.store(env.conn, "in", "command", "/resume"))
+    assert len(a.pending) == 1 and "switched you back on" in a.pending[0] and "1h00m" in a.pending[0]

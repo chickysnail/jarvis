@@ -132,3 +132,43 @@ def test_log_redaction(monkeypatch, capsys):
     _RedactSecrets().filter(rec)
     out = logging.Formatter().format(rec)
     assert "SECRET-TOKEN-VALUE" not in out and "<REDACTED>" in out
+
+
+def test_stop_and_resume(bot):
+    from jarvis import killswitch
+
+    db.kv_set(bot.conn, OWNER_KEY, str(OWNER))
+    run(bot._on_message(update(OWNER, msg(OWNER, "/stop", tg_id=20)), None))
+    assert killswitch.is_paused(bot.conn)
+    assert "Остановлен" in bot.sent[-1][1] and bot.incoming == []
+
+    # While paused: messages and taps are recorded but never reach the agent.
+    run(bot._on_message(update(OWNER, msg(OWNER, "ты тут?", tg_id=21)), None))
+    out_id = chat.store(bot.conn, "out", "text", "q", buttons=["a"], tg_message_id=500)
+    run(bot._on_button(update(OWNER, callback=FakeQuery("0", tg_id=500)), None))
+    assert bot.incoming == []
+    assert [m.text for m in chat.recent(bot.conn) if m.direction == "in"][-2:] == ["ты тут?", "a"]
+
+    run(bot._on_message(update(OWNER, msg(OWNER, "/stop@chickysnail_jarvis_bot", tg_id=22)), None))
+    assert "уже остановлен" in bot.sent[-1][1]
+
+    run(bot._on_message(update(OWNER, msg(OWNER, "/resume", tg_id=23)), None))
+    assert not killswitch.is_paused(bot.conn)
+    assert bot.sent[-1][1] == "▶️ Снова работаю." and len(bot.incoming) == 1
+
+
+def test_start_also_resumes(bot):
+    from jarvis import killswitch
+
+    db.kv_set(bot.conn, OWNER_KEY, str(OWNER))
+    killswitch.pause(bot.conn)
+    run(bot._on_message(update(OWNER, msg(OWNER, "/start", tg_id=30)), None))
+    assert not killswitch.is_paused(bot.conn)
+
+
+def test_stranger_cannot_stop(bot):
+    from jarvis import killswitch
+
+    db.kv_set(bot.conn, OWNER_KEY, str(OWNER))
+    run(bot._on_message(update(STRANGER, msg(STRANGER, "/stop")), None))
+    assert not killswitch.is_paused(bot.conn) and bot.sent == []

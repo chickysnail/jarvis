@@ -12,6 +12,12 @@ and decides for itself when to speak, stay quiet, or look again.
 - [x] Step 5 — agent loop (`jarvis/agent.py`, `jarvis/tools.py`, `jarvis/triggers.py`, `prompts/`)
 - [x] Step 6 — usage/cost tracking (`jarvis/usage.py`, `get_usage` tool, `python -m jarvis.usage [today|week|month|all]`)
 
+## Stop button
+
+Send `/stop` to the bot: no wakes, no API calls, no messages, enforced in code and kept across restarts.
+Phone events and chat are still recorded. `/resume` (or `/start`) turns Jarvis back on.
+Harder stops: `systemctl --user stop jarvis` (everything) or revoke the API key in the Console.
+
 ## Setup
 
 ```bash

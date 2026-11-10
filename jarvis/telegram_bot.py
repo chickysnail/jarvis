@@ -15,10 +15,10 @@ import sqlite3
 import sys
 from collections.abc import Awaitable, Callable
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
-from . import chat, config, db
+from . import chat, config, db, killswitch
 
 log = logging.getLogger("jarvis.telegram")
 OWNER_KEY = "telegram_owner_chat_id"
@@ -60,7 +60,15 @@ class TelegramBot:
         await self.app.start()
         await self.app.updater.start_polling(allowed_updates=["message", "callback_query"])
         me = await self.app.bot.get_me()
-        log.info("telegram bot @%s polling", me.username)
+        try:
+            await self.app.bot.set_my_commands([
+                BotCommand("stop", "⏹ Остановить Jarvis (не думает, не пишет, не тратит деньги)"),
+                BotCommand("resume", "▶️ Включить Jarvis обратно"),
+            ])
+        except Exception:
+            log.warning("could not set bot command menu")
+        log.info("telegram bot @%s polling%s", me.username,
+                 " (PAUSED via /stop)" if killswitch.is_paused(self.conn) else "")
 
     async def stop(self):
         await self.app.updater.stop()
@@ -113,7 +121,27 @@ class TelegramBot:
             reply_to = orig.id if orig else None
         msg_id = chat.store(self.conn, "in", kind, text, reply_to=reply_to,
                             tg_message_id=m.message_id, ts=int(m.date.timestamp()))
+        if kind == "command":
+            cmd = text.split()[0].split("@")[0].lower()
+            if cmd == "/stop":
+                await self._stop()
+                return
+            if cmd in ("/resume", "/start") and killswitch.is_paused(self.conn):
+                killswitch.resume(self.conn)
+                await self.send("▶️ Снова работаю.")
+                # fall through: the agent wakes once, knowing it was paused
+        if killswitch.is_paused(self.conn):
+            return  # recorded, but nobody's home
         await self._dispatch(msg_id)
+
+    async def _stop(self):
+        if killswitch.pause(self.conn):
+            log.warning("PAUSED via /stop")
+            await self.send("⏹ Остановлен. Не думаю, не пишу, не трачу деньги.\n"
+                            "Телефон и чат продолжаю записывать (это бесплатно).\n"
+                            "/resume — включить обратно.")
+        else:
+            await self.send("⏹ Я уже остановлен. /resume — включить обратно.")
 
     async def _on_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         q = update.callback_query
@@ -127,6 +155,8 @@ class TelegramBot:
             label = q.data
         await q.answer()
         msg_id = chat.store(self.conn, "in", "button", label, reply_to=orig.id if orig else None)
+        if killswitch.is_paused(self.conn):
+            return
         # Show the choice and remove the keyboard so it can't be tapped twice.
         if orig:
             try:

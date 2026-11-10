@@ -1,5 +1,7 @@
 import hmac
 import json
+import logging
+import os
 import sqlite3
 from contextlib import asynccontextmanager
 from datetime import date
@@ -7,6 +9,34 @@ from datetime import date
 from fastapi import FastAPI, Header, HTTPException, Request
 
 from . import config, db, sessions
+from .telegram_bot import TelegramBot
+
+log = logging.getLogger("jarvis")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)  # don't log Telegram URLs (contain the token)
+
+
+class _RedactSecrets(logging.Filter):
+    """Scrub secrets from every log line, including tracebacks."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        secrets = [s for s in (config.telegram_token(), config.shared_secret(),
+                               os.environ.get("ANTHROPIC_API_KEY", "")) if len(s) >= 8]
+        if not secrets:
+            return True
+        msg = record.getMessage()
+        if record.exc_info and not record.exc_text:
+            record.exc_text = logging.Formatter().formatException(record.exc_info)
+        for s in secrets:
+            msg = msg.replace(s, "<REDACTED>")
+            if record.exc_text:
+                record.exc_text = record.exc_text.replace(s, "<REDACTED>")
+        record.msg, record.args = msg, None
+        return True
+
+
+for _h in logging.getLogger().handlers:
+    _h.addFilter(_RedactSecrets())
 
 
 @asynccontextmanager
@@ -14,7 +44,21 @@ async def lifespan(app: FastAPI):
     if not config.shared_secret():
         raise RuntimeError("JARVIS_SHARED_SECRET is not set (see .env.example)")
     app.state.db = db.connect()
+    app.state.bot = None
+    if config.telegram_token():
+        bot = TelegramBot(app.state.db, config.telegram_token())
+        try:
+            await bot.start()
+            app.state.bot = bot
+        except Exception as e:
+            # Phone events must keep flowing even if Telegram is misconfigured.
+            # Never log the raw exception: Telegram errors can contain the token.
+            msg = str(e).replace(config.telegram_token(), "<TOKEN>")
+            log.error("telegram bot failed to start (%s: %s); continuing without it",
+                      type(e).__name__, msg)
     yield
+    if app.state.bot:
+        await app.state.bot.stop()
     app.state.db.close()
 
 
@@ -51,7 +95,7 @@ async def post_event(request: Request, x_jarvis_secret: str | None = Header(defa
 
 
 @app.get("/sessions")
-def get_sessions(
+async def get_sessions(  # async: keep all DB access on the event loop thread
     request: Request,
     day: str | None = None,
     min_seconds: int = 60,

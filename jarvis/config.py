@@ -21,6 +21,10 @@ def host() -> str:
     return os.environ.get("JARVIS_HOST", "127.0.0.1")
 
 
+def telegram_token() -> str:
+    return os.environ.get("TELEGRAM_BOT_TOKEN", "")
+
+
 def tz() -> ZoneInfo:
     return ZoneInfo(os.environ.get("JARVIS_TZ", "Europe/Berlin"))
 

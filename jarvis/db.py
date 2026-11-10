@@ -22,7 +22,37 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE UNIQUE INDEX IF NOT EXISTS events_dedup
     ON events (ts, event, app, IFNULL(batt, -1), extra);
 CREATE INDEX IF NOT EXISTS events_ts ON events (ts);
+
+-- Small key/value store (e.g. telegram owner chat id).
+CREATE TABLE IF NOT EXISTS kv (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+-- Every chat message, both directions, including button taps.
+CREATE TABLE IF NOT EXISTS messages (
+    id          INTEGER PRIMARY KEY,
+    ts          INTEGER NOT NULL,
+    direction   TEXT    NOT NULL,          -- 'in' (from me) | 'out' (from Jarvis)
+    kind        TEXT    NOT NULL,          -- 'text' | 'button' | 'command' | 'sticker' | 'photo' | ...
+    text        TEXT    NOT NULL DEFAULT '',
+    buttons     TEXT,                      -- out: JSON list of choice labels offered
+    reply_to    INTEGER REFERENCES messages(id),  -- in/button: the message it answers
+    tg_message_id INTEGER
+);
+CREATE INDEX IF NOT EXISTS messages_ts ON messages (ts);
 """
+
+
+def kv_get(conn: sqlite3.Connection, key: str) -> str | None:
+    row = conn.execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else None
+
+
+def kv_set(conn: sqlite3.Connection, key: str, value: str) -> None:
+    with conn:
+        conn.execute("INSERT INTO kv (key, value) VALUES (?, ?) "
+                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
 
 KNOWN_FIELDS = {"ts", "event", "app", "batt"}
 
